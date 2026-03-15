@@ -269,16 +269,17 @@ def handle_data(context, data):
                 # 卖出当日买入量
                 sell_amount = stock_info['today_buy_amount']
                 if sell_amount > 0:
-                    print(f"{current_time} - 执行做T卖出：卖出数量={sell_amount}")
                     # 提交卖出订单
                     order_id = order(security, -sell_amount)
                     
-                    # 获取实际成交价格
+                    # 获取实际成交信息
                     order_info = get_order(order_id)
                     if order_info and order_info.status == 'filled':
                         # 使用实际成交价格
                         execution_price = order_info.price
                         filled_amount = order_info.filled
+                        
+                        print(f"{current_time} - 执行做T卖出：实际卖出数量={filled_amount}, 实际卖出价格={execution_price:.2f}")
                         
                         # 计算实际卖出所得（扣除佣金和印花税）
                         sell_value = filled_amount * execution_price
@@ -317,16 +318,17 @@ def handle_data(context, data):
                 # 卖出当日买入量
                 sell_amount = stock_info['today_buy_amount']
                 if sell_amount > 0:
-                    print(f"{current_time} - 执行做T卖出：卖出数量={sell_amount}")
                     # 提交卖出订单
                     order_id = order(security, -sell_amount)
                     
-                    # 获取实际成交价格
+                    # 获取实际成交信息
                     order_info = get_order(order_id)
                     if order_info and order_info.status == 'filled':
                         # 使用实际成交价格
                         execution_price = order_info.price
                         filled_amount = order_info.filled
+                        
+                        print(f"{current_time} - 执行做T卖出：实际卖出数量={filled_amount}, 实际卖出价格={execution_price:.2f}")
                         
                         # 计算实际卖出所得（扣除佣金和印花税）
                         sell_value = filled_amount * execution_price
