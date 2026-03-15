@@ -219,28 +219,37 @@ def handle_data(context, data):
             # 执行买入
             try:
                 print(f"{current_time} - 执行买入: {security}, 股数: {buy_shares}")
-                order(security, buy_shares)
+                order_id = order(security, buy_shares)
                 
-                # 计算实际买入成本（含佣金）
-                buy_amount = buy_shares * current_price
-                buy_commission = calculate_commission(buy_amount)
-                actual_buy_cost = buy_amount + buy_commission
-                
-                # 更新累计成本
-                stock_info['total_cost'] += actual_buy_cost
-                # 更新当日买入成本
-                stock_info['today_buy_cost'] += actual_buy_cost
-                # 更新平均成本
-                new_position_amount = position_amount + buy_shares
-                if new_position_amount > 0:
-                    stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
+                # 获取实际成交价格
+                order_info = get_order(order_id)
+                if order_info and order_info.status == 'filled':
+                    # 使用实际成交价格
+                    execution_price = order_info.price
+                    filled_shares = order_info.filled
+                    
+                    # 计算实际买入成本（含佣金）
+                    buy_amount = filled_shares * execution_price
+                    buy_commission = calculate_commission(buy_amount)
+                    actual_buy_cost = buy_amount + buy_commission
+                    
+                    # 更新累计成本
+                    stock_info['total_cost'] += actual_buy_cost
+                    # 更新当日买入成本
+                    stock_info['today_buy_cost'] += actual_buy_cost
+                    # 更新平均成本
+                    new_position_amount = position_amount + filled_shares
+                    if new_position_amount > 0:
+                        stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
+                    else:
+                        stock_info['avg_cost'] = execution_price
+                    # 更新买入信息
+                    stock_info['last_buy_date'] = current_date
+                    stock_info['last_buy_price'] = execution_price
+                    stock_info['today_buy_amount'] += filled_shares
+                    print(f"{current_time} - 买入成功，成交价格={execution_price:.2f}, 成交股数={filled_shares}, 买入金额={buy_amount:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}")
                 else:
-                    stock_info['avg_cost'] = current_price
-                # 更新买入信息
-                stock_info['last_buy_date'] = current_date
-                stock_info['last_buy_price'] = current_price
-                stock_info['today_buy_amount'] += buy_shares
-                print(f"{current_time} - 买入成功，买入金额={buy_amount:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}")
+                    print(f"{current_time} - 买入订单未完全成交或状态异常")
             except Exception as e:
                 print(f"{current_time} - 买入失败: {e}")
     
@@ -270,34 +279,43 @@ def handle_data(context, data):
                 if sell_shares > 0:
                     print(f"{current_time} - 执行做T卖出：股数={sell_shares}, 当日买入量={stock_info['today_buy_amount']}, 可卖量={position.amount}")
                     # 提交卖出订单
-                    order(security, -sell_shares)
+                    order_id = order(security, -sell_shares)
                     
-                    # 计算实际卖出所得（扣除佣金和印花税）
-                    sell_amount = sell_shares * current_price
-                    sell_commission = calculate_commission(sell_amount)
-                    stamp_tax = calculate_stamp_tax(sell_amount, security)
-                    actual_sell_income = sell_amount - sell_commission - stamp_tax
-                    
-                    # 计算T操作净利润和收益率
-                    t_net_profit = actual_sell_income - stock_info['today_buy_cost']
-                    t_profit_rate_actual = t_net_profit / stock_info['today_buy_cost'] if stock_info['today_buy_cost'] > 0 else 0
-                    
-                    # 更新累计T操作净利润
-                    g.total_t_profit += t_net_profit
-                    
-                    # 更新累计成本
-                    stock_info['total_cost'] -= stock_info['today_buy_cost']
-                    
-                    print(f"{current_time} - 做T卖出成功：卖出金额={sell_amount:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计T操作净利润={g.total_t_profit:.2f}")
-                    print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
-                    
-                    # 重置当日买入信息
-                    stock_info['today_buy_amount'] = 0
-                    stock_info['today_buy_cost'] = 0
-                    
-                    # 设置做T标记为True，当日不再执行
-                    stock_info['t_done_today'] = True
+                    # 获取实际成交价格
+                    order_info = get_order(order_id)
+                    if order_info and order_info.status == 'filled':
+                        # 使用实际成交价格
+                        execution_price = order_info.price
+                        filled_shares = order_info.filled
+                        
+                        # 计算实际卖出所得（扣除佣金和印花税）
+                        sell_amount = filled_shares * execution_price
+                        sell_commission = calculate_commission(sell_amount)
+                        stamp_tax = calculate_stamp_tax(sell_amount, security)
+                        actual_sell_income = sell_amount - sell_commission - stamp_tax
+                        
+                        # 计算T操作净利润和收益率
+                        t_net_profit = actual_sell_income - stock_info['today_buy_cost']
+                        t_profit_rate_actual = t_net_profit / stock_info['today_buy_cost'] if stock_info['today_buy_cost'] > 0 else 0
+                        
+                        # 更新累计T操作净利润
+                        g.total_t_profit += t_net_profit
+                        
+                        # 更新累计成本
+                        stock_info['total_cost'] -= stock_info['today_buy_cost']
+                        
+                        print(f"{current_time} - 做T卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_shares}, 卖出金额={sell_amount:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
+                        print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计T操作净利润={g.total_t_profit:.2f}")
+                        print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
+                        
+                        # 重置当日买入信息
+                        stock_info['today_buy_amount'] = 0
+                        stock_info['today_buy_cost'] = 0
+                        
+                        # 设置做T标记为True，当日不再执行
+                        stock_info['t_done_today'] = True
+                    else:
+                        print(f"{current_time} - 卖出订单未完全成交或状态异常")
             else:
                 print(f"{current_time} - 做T条件1不满足：做T收益率={t_profit_rate:.2%} (>3%:{t_profit_rate > g.t_profit_threshold}), 回落={pullback:.2%} (>1%:{pullback > g.t_pullback_threshold})")
             
@@ -309,34 +327,43 @@ def handle_data(context, data):
                 if sell_shares > 0:
                     print(f"{current_time} - 执行做T卖出：股数={sell_shares}, 当日买入量={stock_info['today_buy_amount']}, 可卖量={position.amount}")
                     # 提交卖出订单
-                    order(security, -sell_shares)
+                    order_id = order(security, -sell_shares)
                     
-                    # 计算实际卖出所得（扣除佣金和印花税）
-                    sell_amount = sell_shares * current_price
-                    sell_commission = calculate_commission(sell_amount)
-                    stamp_tax = calculate_stamp_tax(sell_amount, security)
-                    actual_sell_income = sell_amount - sell_commission - stamp_tax
-                    
-                    # 计算T操作净利润和收益率
-                    t_net_profit = actual_sell_income - stock_info['today_buy_cost']
-                    t_profit_rate_actual = t_net_profit / stock_info['today_buy_cost'] if stock_info['today_buy_cost'] > 0 else 0
-                    
-                    # 更新累计T操作净利润
-                    g.total_t_profit += t_net_profit
-                    
-                    # 更新累计成本
-                    stock_info['total_cost'] -= stock_info['today_buy_cost']
-                    
-                    print(f"{current_time} - 做T卖出成功：卖出金额={sell_amount:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计T操作净利润={g.total_t_profit:.2f}")
-                    print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
-                    
-                    # 重置当日买入信息
-                    stock_info['today_buy_amount'] = 0
-                    stock_info['today_buy_cost'] = 0
-                    
-                    # 设置做T标记为True，当日不再执行
-                    stock_info['t_done_today'] = True
+                    # 获取实际成交价格
+                    order_info = get_order(order_id)
+                    if order_info and order_info.status == 'filled':
+                        # 使用实际成交价格
+                        execution_price = order_info.price
+                        filled_shares = order_info.filled
+                        
+                        # 计算实际卖出所得（扣除佣金和印花税）
+                        sell_amount = filled_shares * execution_price
+                        sell_commission = calculate_commission(sell_amount)
+                        stamp_tax = calculate_stamp_tax(sell_amount, security)
+                        actual_sell_income = sell_amount - sell_commission - stamp_tax
+                        
+                        # 计算T操作净利润和收益率
+                        t_net_profit = actual_sell_income - stock_info['today_buy_cost']
+                        t_profit_rate_actual = t_net_profit / stock_info['today_buy_cost'] if stock_info['today_buy_cost'] > 0 else 0
+                        
+                        # 更新累计T操作净利润
+                        g.total_t_profit += t_net_profit
+                        
+                        # 更新累计成本
+                        stock_info['total_cost'] -= stock_info['today_buy_cost']
+                        
+                        print(f"{current_time} - 做T卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_shares}, 卖出金额={sell_amount:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
+                        print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计T操作净利润={g.total_t_profit:.2f}")
+                        print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
+                        
+                        # 重置当日买入信息
+                        stock_info['today_buy_amount'] = 0
+                        stock_info['today_buy_cost'] = 0
+                        
+                        # 设置做T标记为True，当日不再执行
+                        stock_info['t_done_today'] = True
+                    else:
+                        print(f"{current_time} - 卖出订单未完全成交或状态异常")
         else:
             print(f"{current_time} - 做T检查跳过：当日未买入或买入量为0")
     
