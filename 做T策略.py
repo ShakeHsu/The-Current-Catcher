@@ -134,10 +134,10 @@ def handle_data(context, data):
     position = context.portfolio.positions.get(security, None)
     position_amount = position.amount if position else 0
     
-    # 检查是否是第1次买入
+    # 检查是否是第1次买入且当天已买入
     can_buy = True
-    if stock_info['buy_count'] >= 1:
-        print(f"{current_time} - 已买入过，跳过买入")
+    if stock_info['buy_count'] >= 1 and stock_info['last_buy_date'] == current_date:
+        print(f"{current_time} - 第1次买入后当天不再买入，跳过")
         can_buy = False
     
     # 资金管理：总持仓成本不超过上限
