@@ -37,7 +37,8 @@ def initialize(context):
             'today_buy_amount': 0,  # 当日买入量
             'today_buy_cost': 0,  # 当日买入成本（含佣金）
             't_done_today': False,  # 当日是否已执行做T
-            'last_date': None,  # 上次处理的日期
+                'first_buy_today': False,  # 当日是否是第一次买入
+                'last_date': None,  # 上次处理的日期
             'daily_volume': 0,  # 当日累计成交量
         }
     }
@@ -91,6 +92,7 @@ def handle_data(context, data):
         stock_info['today_buy_amount'] = 0
         stock_info['today_buy_cost'] = 0
         stock_info['t_done_today'] = False
+        stock_info['first_buy_today'] = False
         stock_info['daily_volume'] = 0
         stock_info['last_date'] = current_date
         print(f"{current_time} - 新的一天，初始化当日最低价: {current_low}, 最高价: {current_high}")
@@ -245,6 +247,9 @@ def handle_data(context, data):
                     stock_info['last_buy_date'] = current_date
                     stock_info['last_buy_price'] = execution_price
                     stock_info['today_buy_amount'] += filled_amount
+                    # 标记当日第一次买入
+                    if not stock_info['first_buy_today']:
+                        stock_info['first_buy_today'] = True
                     print(f"{current_time} - 买入成功，成交价格={execution_price:.2f}, 成交股数={filled_amount}, 买入金额={buy_value:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}")
                 else:
                     print(f"{current_time} - 买入订单未完全成交或状态异常")
@@ -253,8 +258,8 @@ def handle_data(context, data):
     
     # 做T逻辑
     if position and position.amount > 0 and not stock_info['t_done_today']:
-        # 检查当日是否已买入
-        if stock_info['last_buy_date'] == current_date and stock_info['today_buy_amount'] > 0:
+        # 检查当日是否已买入且不是第一次买入
+        if stock_info['last_buy_date'] == current_date and stock_info['today_buy_amount'] > 0 and not stock_info['first_buy_today']:
             # 计算做T毛利=（最新价格-当日买入价格）/当日买入价格
             t_gross_profit_rate = (current_price - stock_info['last_buy_price']) / stock_info['last_buy_price']
             
