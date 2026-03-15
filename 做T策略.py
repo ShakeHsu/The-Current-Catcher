@@ -266,10 +266,10 @@ def handle_data(context, data):
             # 条件1：做T毛利>3%且回落>1%
             if t_gross_profit_rate > g.t_profit_threshold and pullback > g.t_pullback_threshold:
                 print(f"{current_time} - 做T条件1触发：做T收益率>3%且回落>1%")
-                # 卖出当日买入量，不超过可卖量
-                sell_amount = min(position.amount, stock_info['today_buy_amount'])
+                # 卖出当日买入量
+                sell_amount = stock_info['today_buy_amount']
                 if sell_amount > 0:
-                    print(f"{current_time} - 执行做T卖出：股数={sell_amount}, 当日买入量={stock_info['today_buy_amount']}, 可卖量={position.amount}")
+                    print(f"{current_time} - 执行做T卖出：卖出数量={sell_amount}")
                     # 提交卖出订单
                     order_id = order(security, -sell_amount)
                     
@@ -314,10 +314,10 @@ def handle_data(context, data):
             # 条件2：14:55固定时间，直接卖出
             if current_time.hour == 14 and current_time.minute == 55 and not stock_info['t_done_today']:
                 print(f"{current_time} - 做T条件2触发：14:55固定时间")
-                # 卖出当日买入量，不超过可卖量
-                sell_amount = min(position.amount, stock_info['today_buy_amount'])
+                # 卖出当日买入量
+                sell_amount = stock_info['today_buy_amount']
                 if sell_amount > 0:
-                    print(f"{current_time} - 执行做T卖出：股数={sell_amount}, 当日买入量={stock_info['today_buy_amount']}, 可卖量={position.amount}")
+                    print(f"{current_time} - 执行做T卖出：卖出数量={sell_amount}")
                     # 提交卖出订单
                     order_id = order(security, -sell_amount)
                     
