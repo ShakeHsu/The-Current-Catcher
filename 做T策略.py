@@ -366,16 +366,15 @@ def handle_data(context, data):
         position = context.portfolio.positions.get(security, None)
         if position and position.amount > 0:
             total_value = position.amount * current_price
-            position_cost = stock_info['avg_cost']
             total_cost = stock_info['total_cost']
             profit_loss = total_value - total_cost
             profit_loss_ratio = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
 
             print(f"{current_time} - 收盘统计:")
             print(f"{current_time} -   股票: {security}")
-            print(f"{current_time} -   持仓量: {position.amount}")
+            print(f"{current_time} -   持仓量: {position.amount}")  
             print(f"{current_time} -   当前价格: {current_price:.2f}")
-            print(f"{current_time} -   持仓平均成本: {position_cost:.2f}")
+            print(f"{current_time} -   持仓平均成本: {stock_info['avg_cost']:.2f}")
             print(f"{current_time} -   总市值: {total_value:.2f}")
             print(f"{current_time} -   持仓成本: {total_cost:.2f}")
             print(f"{current_time} -   盈亏: {profit_loss:.2f}")
