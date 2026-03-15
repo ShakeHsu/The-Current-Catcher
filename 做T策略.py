@@ -34,7 +34,7 @@ def initialize(context):
             'last_buy_price': None,  # 上次买入价格
             'day_low': None,  # 当日最低价
             'day_high': 0,  # 当日最高价
-            'today_buy_amount': 0,  # 当日买入量
+            'today_buy_shares': 0,  # 当日买入量
             'today_buy_cost': 0,  # 当日买入成本（含佣金）
             't_done_today': False,  # 当日是否已执行做T
             'last_date': None,  # 上次处理的日期
@@ -88,7 +88,7 @@ def handle_data(context, data):
     if stock_info['last_date'] != current_date:
         stock_info['day_low'] = current_low
         stock_info['day_high'] = current_high
-        stock_info['today_buy_amount'] = 0
+        stock_info['today_buy_shares'] = 0
         stock_info['today_buy_cost'] = 0
         stock_info['t_done_today'] = False
         stock_info['daily_volume'] = 0
@@ -131,7 +131,7 @@ def handle_data(context, data):
     
     # 买入逻辑
     position = context.portfolio.positions.get(security, None)
-    position_amount = position.amount if position else 0
+    position_shares = position.amount if position else 0
     
     # 检查今天是否已经买过
     can_buy = True
@@ -238,16 +238,16 @@ def handle_data(context, data):
                     # 更新当日买入成本
                     stock_info['today_buy_cost'] += actual_buy_cost
                     # 更新平均成本
-                    new_position_amount = position_amount + filled_shares
-                    if new_position_amount > 0:
-                        stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
+                    new_position_shares = position_shares + filled_shares
+                    if new_position_shares > 0:
+                        stock_info['avg_cost'] = stock_info['total_cost'] / new_position_shares
                     else:
                         stock_info['avg_cost'] = execution_price
                     # 更新买入信息
                     stock_info['last_buy_date'] = current_date
                     stock_info['last_buy_price'] = execution_price
-                    stock_info['today_buy_amount'] += filled_shares
-                    print(f"{current_time} - 买入成功，成交价格={execution_price:.2f}, 成交股数={filled_shares}, 买入金额={buy_amount:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}")
+                    stock_info['today_buy_shares'] += filled_shares
+                    print(f"{current_time} - 买入成功，成交价格={execution_price:.2f}, 成交股数={filled_shares}, 买入金额={buy_amount:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_shares']}")
                 else:
                     print(f"{current_time} - 买入订单未完全成交或状态异常")
             except Exception as e:
@@ -256,7 +256,7 @@ def handle_data(context, data):
     # 做T逻辑
     if position and position.amount > 0 and not stock_info['t_done_today']:
         # 检查当日是否已买入
-        if stock_info['last_buy_date'] == current_date and stock_info['today_buy_amount'] > 0:
+        if stock_info['last_buy_date'] == current_date and stock_info['today_buy_shares'] > 0:
             yesterday_close = hist['close'][-1]
             gain = (current_price / yesterday_close - 1)
             
@@ -275,9 +275,9 @@ def handle_data(context, data):
             if t_profit_rate > g.t_profit_threshold and pullback > g.t_pullback_threshold:
                 print(f"{current_time} - 做T条件1触发：做T收益率>3%且回落>1%")
                 # 卖出当日买入量，不超过可卖量
-                sell_shares = min(position.amount, stock_info['today_buy_amount'])
+                sell_shares = min(position.amount, stock_info['today_buy_shares'])
                 if sell_shares > 0:
-                    print(f"{current_time} - 执行做T卖出：股数={sell_shares}, 当日买入量={stock_info['today_buy_amount']}, 可卖量={position.amount}")
+                    print(f"{current_time} - 执行做T卖出：股数={sell_shares}, 当日买入量={stock_info['today_buy_shares']}, 可卖量={position.amount}")
                     # 提交卖出订单
                     order_id = order(security, -sell_shares)
                     
@@ -309,7 +309,7 @@ def handle_data(context, data):
                         print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
                         
                         # 重置当日买入信息
-                        stock_info['today_buy_amount'] = 0
+                        stock_info['today_buy_shares'] = 0
                         stock_info['today_buy_cost'] = 0
                         
                         # 设置做T标记为True，当日不再执行
@@ -323,9 +323,9 @@ def handle_data(context, data):
             if current_time.hour == 14 and current_time.minute == 55 and not stock_info['t_done_today']:
                 print(f"{current_time} - 做T条件2触发：14:55固定时间")
                 # 卖出当日买入量，不超过可卖量
-                sell_shares = min(position.amount, stock_info['today_buy_amount'])
+                sell_shares = min(position.amount, stock_info['today_buy_shares'])
                 if sell_shares > 0:
-                    print(f"{current_time} - 执行做T卖出：股数={sell_shares}, 当日买入量={stock_info['today_buy_amount']}, 可卖量={position.amount}")
+                    print(f"{current_time} - 执行做T卖出：股数={sell_shares}, 当日买入量={stock_info['today_buy_shares']}, 可卖量={position.amount}")
                     # 提交卖出订单
                     order_id = order(security, -sell_shares)
                     
@@ -357,7 +357,7 @@ def handle_data(context, data):
                         print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
                         
                         # 重置当日买入信息
-                        stock_info['today_buy_amount'] = 0
+                        stock_info['today_buy_shares'] = 0
                         stock_info['today_buy_cost'] = 0
                         
                         # 设置做T标记为True，当日不再执行
