@@ -192,9 +192,9 @@ def handle_data(context, data):
         # 条件2：前a天中有b天满足5日均线上升
         condition2 = condition2_count >= b_days
         
-        # 条件3：当日价格低于昨日收盘价
+        # 条件3：当日最低价格低于昨日收盘价
         yesterday_close = hist['close'][-1]
-        condition3 = current_price < yesterday_close
+        condition3 = day_low < yesterday_close
         
         # 条件4：反弹确认：当前最新价 >= 当日最低价 * (1 + g.rebound_threshold)
         rebound_confirm = current_price >= day_low * (1 + g.rebound_threshold)
@@ -202,7 +202,7 @@ def handle_data(context, data):
         print(f"{current_time} - 买入条件检查:")
         print(f"{current_time} -   条件1: 前{m_days}天中有{n_days}天满足收盘价>开盘价且收盘价>5日均线 = {condition1} (满足天数: {condition1_count}/{m_days})")
         print(f"{current_time} -   条件2: 前{a_days}天中有{b_days}天满足5日均线上升 = {condition2} (满足天数: {condition2_count}/{a_days})")
-        print(f"{current_time} -   条件3: 当日价格低于昨日收盘价 = {condition3}")
+        print(f"{current_time} -   条件3: 当日最低价格低于昨日收盘价 = {condition3}")
         print(f"{current_time} -   条件4: 反弹确认 = {rebound_confirm}")
         print(f"{current_time} - 价格数据: 当前价格={current_price:.2f}, 当日最低价={day_low:.2f}, 昨日收盘价={yesterday_close:.2f}, 反弹阈值={day_low * (1 + g.rebound_threshold):.2f}")
         
