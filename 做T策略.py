@@ -8,7 +8,10 @@ def calculate_commission(amount):
 def calculate_stamp_tax(amount, security):
     """计算印花税"""
     if security.endswith('.SS') or security.endswith('.SZ'):
-        if security.startswith('51') or security.startswith('56'):
+        # ETF代码特征：51、56、159、50、58开头
+        etf_prefixes = ['51', '56', '159', '50', '58']
+        is_etf = any(security.startswith(prefix) for prefix in etf_prefixes)
+        if is_etf:
             return 0  # ETF不收印花税
         else:
             return amount * 0.0005  # 普通股票卖出时收取
