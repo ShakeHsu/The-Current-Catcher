@@ -137,8 +137,8 @@ def handle_data(context, data):
     
     # 检查今天是否已经买过
     can_buy = True
-    if stock_info['last_buy_date'] == current_date:
-        print(f"{current_time} - 今天已经买过，跳过买入")
+    if stock_info['first_buy_today']:
+        print(f"{current_time} - 当日已买入，不再买入")
         can_buy = False
     
     # 资金管理：总持仓成本不超过上限
