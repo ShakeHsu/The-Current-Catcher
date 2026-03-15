@@ -255,22 +255,16 @@ def handle_data(context, data):
     if position and position.amount > 0 and not stock_info['t_done_today']:
         # 检查当日是否已买入
         if stock_info['last_buy_date'] == current_date and stock_info['today_buy_amount'] > 0:
-            yesterday_close = hist['close'][-1]
-            gain = (current_price / yesterday_close - 1)
-            
-            # 计算做T收益率
-            if stock_info['avg_cost'] > 0:
-                t_profit_rate = (current_price - stock_info['avg_cost']) / stock_info['avg_cost']
-            else:
-                t_profit_rate = 0
+            # 计算做T毛利=（最新价格-当日买入价格）/当日买入价格
+            t_gross_profit_rate = (current_price - stock_info['last_buy_price']) / stock_info['last_buy_price']
             
             # 计算回落幅度
             pullback = (day_high - current_price) / day_high if day_high > 0 else 0
             
-            print(f"{current_time} - 做T数据：当前价格={current_price:.2f}, 持仓成本={stock_info['avg_cost']:.2f}, 做T收益率={t_profit_rate:.2%}, 当日最高价={day_high:.2f}, 回落={pullback:.2%}")
+            print(f"{current_time} - 做T数据：当前价格={current_price:.2f}, 当日买入价格={stock_info['last_buy_price']:.2f}, 做T毛利={t_gross_profit_rate:.2%}, 当日最高价={day_high:.2f}, 回落={pullback:.2%}")
             
-            # 条件1：做T收益率>3%且回落>1%
-            if t_profit_rate > g.t_profit_threshold and pullback > g.t_pullback_threshold:
+            # 条件1：做T毛利>3%且回落>1%
+            if t_gross_profit_rate > g.t_profit_threshold and pullback > g.t_pullback_threshold:
                 print(f"{current_time} - 做T条件1触发：做T收益率>3%且回落>1%")
                 # 卖出当日买入量，不超过可卖量
                 sell_amount = min(position.amount, stock_info['today_buy_amount'])
