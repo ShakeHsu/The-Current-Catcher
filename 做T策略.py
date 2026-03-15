@@ -367,7 +367,7 @@ def handle_data(context, data):
         if position and position.amount > 0:
             total_value = position.amount * current_price
             position_cost = stock_info['avg_cost']
-            total_cost = position_cost * position.amount
+            total_cost = stock_info['total_cost']
             profit_loss = total_value - total_cost
             profit_loss_ratio = (profit_loss / total_cost) * 100 if total_cost > 0 else 0
 
