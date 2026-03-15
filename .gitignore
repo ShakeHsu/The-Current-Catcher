@@ -1,0 +1,50 @@
+# 忽略文件
+
+# 环境配置文件
+.env
+
+# Python相关
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# 编辑器相关
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统相关
+.DS_Store
+Thumbs.db
+
+# 测试文件
+.pytest_cache/
+.tox/
+
+# 打包文件
+build/
+dist/
+*.egg-info/
+
+# 备份文件
+*.backup
+*.bak
+
+# 其他
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

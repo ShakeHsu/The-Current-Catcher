@@ -1,0 +1,17 @@
+{
+  "name": "the-current-catcher",
+  "version": "1.0.0",
+  "description": "趋势追踪交易策略系统",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "moment": "^2.29.4"
+  },
+  "keywords": ["trading", "strategy", "stock"],
+  "author": "",
+  "license": "MIT"
+}
