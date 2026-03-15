@@ -242,7 +242,7 @@ def handle_data(context, data):
                     if new_position_amount > 0:
                         stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
                     else:
-                        stock_info['avg_cost'] = execution_price
+                        stock_info['avg_cost'] = 0  # 无持仓时成本为0
                     # 更新买入信息
                     stock_info['last_buy_date'] = current_date
                     stock_info['last_buy_price'] = execution_price
