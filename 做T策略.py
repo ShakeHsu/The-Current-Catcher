@@ -23,7 +23,6 @@ def initialize(context):
     # 策略参数
     g.security = "159206.SZ"  # 卫星ETF
     g.realized_pnl = 0  # 累计落袋盈亏（全局变量）
-    g.total_t_profit = 0  # 累计T操作净利润
     
     # 股票相关变量
     g.stock_info = {
@@ -48,6 +47,7 @@ def initialize(context):
     g.max_cost = 200000  # 单只股票持仓成本上限（元）
     g.t_profit_threshold = 0.03  # 做T收益率阈值：3%
     g.t_pullback_threshold = 0.01  # 做T回落阈值：1%
+    g.realized_pnl = 0  # 累计落袋盈亏
     
     # 买入条件参数
     g.rebound_threshold = 0.0003  # 反弹阈值：0.03%
@@ -285,14 +285,14 @@ def handle_data(context, data):
                     t_net_profit = actual_sell_income - stock_info['today_buy_cost']
                     t_profit_rate_actual = t_net_profit / stock_info['today_buy_cost'] if stock_info['today_buy_cost'] > 0 else 0
                     
-                    # 更新累计T操作净利润
-                    g.total_t_profit += t_net_profit
+                    # 更新累计落袋盈亏
+                    g.realized_pnl += t_net_profit
                     
                     # 更新累计成本
                     stock_info['total_cost'] -= stock_info['today_buy_cost']
                     
                     print(f"{current_time} - 做T卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计T操作净利润={g.total_t_profit:.2f}")
+                    print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计落袋盈亏={g.realized_pnl:.2f}")
                     print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
                     
                     # 重置当日买入信息
@@ -302,7 +302,7 @@ def handle_data(context, data):
                     # 设置做T标记为True，当日不再执行
                     stock_info['t_done_today'] = True
             else:
-                print(f"{current_time} - 做T条件1不满足：做T收益率={t_profit_rate:.2%} (>3%:{t_profit_rate > g.t_profit_threshold}), 回落={pullback:.2%} (>1%:{pullback > g.t_pullback_threshold})")
+                print(f"{current_time} - 做T条件1不满足：做T毛利收益率={t_gross_profit_rate:.2%} (>3%:{t_gross_profit_rate > g.t_profit_threshold}), 回落={pullback:.2%} (>1%:{pullback > g.t_pullback_threshold})")
             
             # 条件2：14:55固定时间，直接卖出
             if current_time.hour == 14 and current_time.minute == 55 and not stock_info['t_done_today'] and stock_info['buy_count'] > 1:
@@ -329,14 +329,14 @@ def handle_data(context, data):
                     t_net_profit = actual_sell_income - stock_info['today_buy_cost']
                     t_profit_rate_actual = t_net_profit / stock_info['today_buy_cost'] if stock_info['today_buy_cost'] > 0 else 0
                     
-                    # 更新累计T操作净利润
-                    g.total_t_profit += t_net_profit
+                    # 更新累计落袋盈亏
+                    g.realized_pnl += t_net_profit
                     
                     # 更新累计成本
                     stock_info['total_cost'] -= stock_info['today_buy_cost']
                     
                     print(f"{current_time} - 做T卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计T操作净利润={g.total_t_profit:.2f}")
+                    print(f"{current_time} - T操作净利润={t_net_profit:.2f}, T操作收益率={t_profit_rate_actual:.2%}, 累计落袋盈亏={g.realized_pnl:.2f}")
                     print(f"{current_time} - 当日买入成本={stock_info['today_buy_cost']:.2f}, 累计成本={stock_info['total_cost']:.2f}")
                     
                     # 重置当日买入信息
@@ -365,10 +365,10 @@ def handle_data(context, data):
             print(f"{current_time} -   持仓成本: {stock_info['total_cost']:.2f}")
             print(f"{current_time} -   持仓盈亏: {profit_loss:.2f}")
             print(f"{current_time} -   持仓盈亏比例: {profit_loss_ratio:.2f}%")
-            print(f"{current_time} -   落袋盈亏: {g.total_t_profit:.2f}")
+            print(f"{current_time} -   累计落袋盈亏: {g.realized_pnl:.2f}")
         else:
             print(f"{current_time} - 收盘统计:")
             print(f"{current_time} -   股票: {security}")
             print(f"{current_time} -   持仓量: 0")
             print(f"{current_time} -   当前价格: {current_price:.2f}")
-            print(f"{current_time} -   落袋盈亏: {g.total_t_profit:.2f}")
+            print(f"{current_time} -   累计落袋盈亏: {g.realized_pnl:.2f}")
