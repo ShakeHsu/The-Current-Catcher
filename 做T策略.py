@@ -136,8 +136,8 @@ def handle_data(context, data):
     
     # 检查是否是第1次买入
     can_buy = True
-    if stock_info['buy_count'] >= 1:
-        print(f"{current_time} - 已买入过，跳过买入")
+    if stock_info['last_buy_date'] == current_date:
+        print(f"{current_time} - 今天已经买入过，跳过")
         can_buy = False
     
     # 资金管理：总持仓成本不超过上限
