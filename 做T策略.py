@@ -224,7 +224,10 @@ def handle_data(context, data):
                 
                 # 获取实际成交价格
                 order_info = get_order(order_id)
-                if order_info and order_info.status == 'filled':
+                # 处理order_info可能是列表的情况
+                if isinstance(order_info, list):
+                    order_info = order_info[0] if order_info else None
+                if order_info and hasattr(order_info, 'status') and order_info.status == 'filled':
                     # 使用实际成交价格
                     execution_price = order_info.price
                     filled_amount = order_info.filled
@@ -276,7 +279,10 @@ def handle_data(context, data):
                     
                     # 获取实际成交信息
                     order_info = get_order(order_id)
-                    if order_info and order_info.status == 'filled':
+                    # 处理order_info可能是列表的情况
+                    if isinstance(order_info, list):
+                        order_info = order_info[0] if order_info else None
+                    if order_info and hasattr(order_info, 'status') and order_info.status == 'filled':
                         # 使用实际成交价格
                         execution_price = order_info.price
                         filled_amount = order_info.filled
@@ -325,7 +331,10 @@ def handle_data(context, data):
                     
                     # 获取实际成交信息
                     order_info = get_order(order_id)
-                    if order_info and order_info.status == 'filled':
+                    # 处理order_info可能是列表的情况
+                    if isinstance(order_info, list):
+                        order_info = order_info[0] if order_info else None
+                    if order_info and hasattr(order_info, 'status') and order_info.status == 'filled':
                         # 使用实际成交价格
                         execution_price = order_info.price
                         filled_amount = order_info.filled
