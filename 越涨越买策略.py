@@ -139,6 +139,9 @@ def handle_data(context, data):
     avg_20d_volume = hist['volume'][-20:].mean()
     volume_ratio = avg_3d_volume / avg_20d_volume if avg_20d_volume > 0 else 0
     
+    # 成交量过滤
+    volume_filter = volume_ratio >= g.volume_ratio_threshold
+    
     # 买入逻辑
     position = context.portfolio.positions.get(security, None)
     position_amount = position.amount if position else 0
@@ -158,9 +161,10 @@ def handle_data(context, data):
     if can_buy and current_time.hour < 14:
         print(f"{current_time} - 盘中买入检查:")
         print(f"{current_time} -   成交量过滤: 前3日均量/前20日均量 = {volume_ratio:.2f}")
+        print(f"{current_time} -   成交量过滤结果={volume_filter}")
         
         # 成交量过滤
-        if volume_ratio >= g.volume_ratio_threshold:
+        if volume_filter:
             # 计算买入股数：向上取整至100股整数倍
             buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
             if buy_amount < 100:
@@ -202,10 +206,11 @@ def handle_data(context, data):
     elif can_buy and current_time.hour == 14 and current_time.minute == 55:
         print(f"{current_time} - 尾盘买入检查:")
         print(f"{current_time} -   成交量过滤: 前3日均量/前20日均量 = {volume_ratio:.2f}")
+        print(f"{current_time} -   成交量过滤结果={volume_filter}")
         print(f"{current_time} -   最新价/5日均线 = {current_price/ma5:.2f} (<2%: {current_price/ma5 < 1.02})")
         
         # 成交量过滤和价格/5日均线过滤
-        if volume_ratio >= g.volume_ratio_threshold and current_price / ma5 < 1.02:
+        if volume_filter and current_price / ma5 < 1.02:
             # 计算买入股数：向上取整至100股整数倍
             buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
             if buy_amount < 100:
