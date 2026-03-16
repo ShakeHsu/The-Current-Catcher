@@ -1,5 +1,5 @@
 import datetime
-
+#拉取
 def calculate_commission(amount):
     """计算佣金"""
     commission = amount * 0.00012
