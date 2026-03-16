@@ -139,8 +139,8 @@ def handle_data(context, data):
     avg_20d_volume = hist['volume'][-20:].mean()
     volume_ratio = avg_3d_volume / avg_20d_volume if avg_20d_volume > 0 else 0
     
-    # 成交量过滤
-    volume_filter = volume_ratio >= g.volume_ratio_threshold
+    # 成交量过滤：成交量比要小于成交量过滤阈值
+    volume_filter = volume_ratio < g.volume_ratio_threshold
     
     # 买入逻辑
     position = context.portfolio.positions.get(security, None)
