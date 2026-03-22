@@ -146,12 +146,12 @@ def handle_data(context, data):
             ma5 = hist['close'][i:i+5].mean()
             ma5_list.append(ma5)
     
-    # 计算前60日成交额中位数（使用可用数据）
+    # 计算前60日成交量中位数（使用可用数据）
     if len(hist) >= 60:
         amount_60d = (hist['close'] * hist['volume'])[-60:]
     else:
         amount_60d = (hist['close'] * hist['volume'])
-        print(f"{current_time} - 数据不足60天，使用{len(hist)}天数据计算成交额中位数")
+        print(f"{current_time} - 数据不足60天，使用{len(hist)}天数据计算成交量中位数")
     amount_median = amount_60d.median()
     
     # 买入逻辑（14:55检查）
@@ -171,7 +171,7 @@ def handle_data(context, data):
             can_buy = False
         
         if can_buy:
-            # 计算当日成交额
+            # 计算当日成交量
             current_amount = current_price * stock_info['daily_volume']
             
             # 计算当日5日均线
@@ -186,13 +186,13 @@ def handle_data(context, data):
             # 条件2：当日14:55价格低于5日均线
             condition2 = current_price < ma5
             
-            # 条件3：当日14:55成交额<前60日成交额中位数
+            # 条件3：当日14:55成交量<前60日成交量中位数
             condition3 = current_amount < amount_median
             
             print(f"{current_time} - 买入条件检查:")
             print(f"{current_time} -   条件1: 当日14:55价格/60日均线<{g.ma60_ratio_buy} = {condition1} (当前价格/60日均线={current_price/ma60:.2f})")
             print(f"{current_time} -   条件2: 当日14:55价格低于5日均线 = {condition2} (当前价格={current_price:.2f}, 5日均线={ma5:.2f})")
-            print(f"{current_time} -   条件3: 当日14:55成交额<前60日成交额中位数 = {condition3} (当日成交额={current_amount:.0f}, 前60日成交额中位数={amount_median:.0f})")
+            print(f"{current_time} -   条件3: 当日14:55成交量<前60日成交量中位数 = {condition3} (当日成交量={current_amount:.0f}, 前60日成交量中位数={amount_median:.0f})")
             
             if condition1 and condition2 and condition3:
                 # 计算买入股数：向上取整至100股整数倍
@@ -278,13 +278,13 @@ def handle_data(context, data):
     
     # 止盈条件检查：14:55检查
     if current_time.hour == 14 and current_time.minute == 55 and position and position.amount > 0 and not stock_info['sell_check_today']:
-        # 计算当日成交额
+        # 计算当日成交量
         current_amount = current_price * stock_info['daily_volume']
         
-        # 止盈条件1：当日14:55收盘价/60日均线>1.2且成交额>前60日成交额中位数，卖出10,000元
+        # 止盈条件1：当日14:55收盘价/60日均线>1.2且成交量>前60日成交量中位数，卖出10,000元
         if current_price / ma60 > g.ma60_ratio_sell1 and current_amount > amount_median:
             sell_value = 10000
-            print(f"{current_time} - 止盈条件1触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell1}且成交额>前60日成交额中位数")
+            print(f"{current_time} - 止盈条件1触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell1}且成交量>前60日成交量中位数")
             # 计算卖出股数
             sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
             if sell_amount < 100:
@@ -292,10 +292,10 @@ def handle_data(context, data):
             # 确保不超过持仓量
             sell_amount = min(sell_amount, position.amount)
         
-        # 止盈条件2：当日14:55收盘价/60日均线>1.1且成交额>前60日成交额中位数，卖出7500元
+        # 止盈条件2：当日14:55收盘价/60日均线>1.1且成交量>前60日成交量中位数，卖出7500元
         elif current_price / ma60 > g.ma60_ratio_sell2 and current_amount > amount_median:
             sell_value = 7500
-            print(f"{current_time} - 止盈条件2触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell2}且成交额>前60日成交额中位数")
+            print(f"{current_time} - 止盈条件2触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell2}且成交量>前60日成交量中位数")
             # 计算卖出股数
             sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
             if sell_amount < 100:
@@ -303,10 +303,10 @@ def handle_data(context, data):
             # 确保不超过持仓量
             sell_amount = min(sell_amount, position.amount)
         
-        # 止盈条件3：当日14:55收盘价/60日均线>1.05且成交额>前60日成交额中位数，卖出5000元
+        # 止盈条件3：当日14:55收盘价/60日均线>1.05且成交量>前60日成交量中位数，卖出5000元
         elif current_price / ma60 > g.ma60_ratio_sell3 and current_amount > amount_median:
             sell_value = 5000
-            print(f"{current_time} - 止盈条件3触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell3}且成交额>前60日成交额中位数")
+            print(f"{current_time} - 止盈条件3触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell3}且成交量>前60日成交量中位数")
             # 计算卖出股数
             sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
             if sell_amount < 100:
