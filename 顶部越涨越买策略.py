@@ -23,7 +23,7 @@ def calculate_stamp_tax(amount, security):
 def initialize(context):
     """初始化策略"""
     # 策略参数
-    g.security = "159206.SZ"  # 卫星ETF
+    g.security = "159825.SZ"  # 农业ETF
     g.realized_pnl = 0  # 累计落袋盈亏（全局变量）
     g.pending_orders = {}  # 待处理的订单
     
@@ -47,12 +47,12 @@ def initialize(context):
     
     # 策略参数
     g.buy_value = 10000  # 每次买入目标金额（元）
-    g.sell_value = 10000  # 每次卖出目标金额（元）
     g.max_cost = 200000  # 单只股票持仓成本上限（元）
-    g.rebound_threshold = 0.0003  # 反弹阈值：0.03%
-    g.ma60_ratio_buy = 1.05  # 买入时收盘价/60日均线阈值
-    g.ma60_ratio_sell = 1.2  # 卖出时收盘价/60日均线阈值
-    g.profit_threshold = 0.005  # 第2次买入后盈利阈值：0.5%
+    g.ma60_ratio_buy = 1.02  # 买入时价格/60日均线阈值
+    g.ma60_ratio_sell1 = 1.2  # 止盈条件1：价格/60日均线阈值
+    g.ma60_ratio_sell2 = 1.1  # 止盈条件2：价格/60日均线阈值
+    g.ma60_ratio_sell3 = 1.05  # 止盈条件3：价格/60日均线阈值
+    g.ma60_ratio_stop = 0.98  # 止损条件：收盘价/60日均线阈值
     
     # 打印初始化信息
     print(f"[{datetime.datetime.now()}] 顶部越涨越买策略初始化完成，股票: {g.security}")
@@ -154,72 +154,47 @@ def handle_data(context, data):
         print(f"{current_time} - 数据不足60天，使用{len(hist)}天数据计算成交额中位数")
     amount_median = amount_60d.median()
     
-    # 买入逻辑
-    position = context.portfolio.positions.get(security, None)
-    position_amount = position.amount if position else 0
-    
-    # 检查今天是否已经买入
-    can_buy = True
-    if stock_info['last_buy_date'] == current_date:
-        print(f"{current_time} - 今天已经买入过，跳过")
-        can_buy = False
-    
-    # 资金管理：总持仓成本不超过上限
-    if stock_info['total_cost'] >= g.max_cost:
-        print(f"{current_time} - 持仓成本已达上限，跳过买入")
-        can_buy = False
-    
-    if can_buy:
-        # 条件1：前5天中有至少3天满足收盘价/60日均线<1.05
-        condition1_count = 0
-        for i in range(max(0, len(hist)-5), len(hist)):
-            close = hist['close'][i]
-            if close / ma60 < g.ma60_ratio_buy:
-                condition1_count += 1
-        condition1 = condition1_count >= 3
+    # 买入逻辑（14:55检查）
+    if current_time.hour == 14 and current_time.minute == 55:
+        position = context.portfolio.positions.get(security, None)
+        position_amount = position.amount if position else 0
         
-        # 条件2：前5天中有至少3天5日均线呈上升趋势
-        condition2_count = 0
-        if len(ma5_list) >= 2:
-            for i in range(max(0, len(ma5_list)-5), len(ma5_list)-1):
-                if ma5_list[i+1] > ma5_list[i]:
-                    condition2_count += 1
-        condition2 = condition2_count >= 3
+        # 检查今天是否已经买入
+        can_buy = True
+        if stock_info['last_buy_date'] == current_date:
+            print(f"{current_time} - 今天已经买入过，跳过")
+            can_buy = False
         
-        # 条件3：当日最低价格低于昨日收盘价
-        yesterday_close = hist['close'][-1]
-        condition3 = day_low < yesterday_close
+        # 资金管理：总持仓成本不超过上限
+        if stock_info['total_cost'] >= g.max_cost:
+            print(f"{current_time} - 持仓成本已达上限，跳过买入")
+            can_buy = False
         
-        # 条件4：反弹确认：当前最新价 >= 当日最低价 * (1 + g.rebound_threshold)
-        rebound_confirm = current_price >= day_low * (1 + g.rebound_threshold)
-        
-        # 条件5：前5天中有至少3天成交额<前60日成交额中位数
-        condition5_count = 0
-        for i in range(max(0, len(hist)-5), len(hist)):
-            amount = hist['close'][i] * hist['volume'][i]
-            if amount < amount_median:
-                condition5_count += 1
-        condition5 = condition5_count >= 3
-        
-        print(f"{current_time} - 买入条件检查:")
-        print(f"{current_time} -   条件1: 前5天中有至少3天满足收盘价/60日均线<{g.ma60_ratio_buy} = {condition1} (满足天数: {condition1_count}/5)")
-        print(f"{current_time} -   条件2: 前5天中有至少3天5日均线呈上升趋势 = {condition2} (满足天数: {condition2_count}/5)")
-        print(f"{current_time} -   条件3: 当日最低价格低于昨日收盘价 = {condition3}")
-        print(f"{current_time} -   条件4: 反弹确认 = {rebound_confirm}")
-        print(f"{current_time} -   条件5: 前5天中有至少3天成交额<前60日成交额中位数 = {condition5} (满足天数: {condition5_count}/5)")
-        print(f"{current_time} - 价格数据: 当前价格={current_price:.2f}, 当日最低价={day_low:.2f}, 昨日收盘价={yesterday_close:.2f}, 60日均线={ma60:.2f}")
-        
-        # 当满足前5个条件后，再判断条件6
-        if condition1 and condition2 and condition3 and rebound_confirm and condition5:
-            # 条件6：价格大于上一次买入价格
-            condition6 = True
-            if stock_info['last_buy_price'] is not None:
-                condition6 = current_price > stock_info['last_buy_price']
-                print(f"{current_time} -   条件6: 价格大于上一次买入价格 = {condition6} (当前价格={current_price:.2f}, 上次买入价格={stock_info['last_buy_price']:.2f})")
-            else:
-                print(f"{current_time} -   条件6: 首次买入，自动满足")
+        if can_buy:
+            # 计算当日成交额
+            current_amount = current_price * stock_info['daily_volume']
             
-            if condition6:
+            # 计算当日5日均线
+            if len(ma5_list) > 0:
+                ma5 = ma5_list[-1]
+            else:
+                ma5 = current_price
+            
+            # 条件1：当日14:55价格/60日均线<1.02
+            condition1 = current_price / ma60 < g.ma60_ratio_buy
+            
+            # 条件2：当日14:55价格低于5日均线
+            condition2 = current_price < ma5
+            
+            # 条件3：当日14:55成交额<前60日成交额中位数
+            condition3 = current_amount < amount_median
+            
+            print(f"{current_time} - 买入条件检查:")
+            print(f"{current_time} -   条件1: 当日14:55价格/60日均线<{g.ma60_ratio_buy} = {condition1} (当前价格/60日均线={current_price/ma60:.2f})")
+            print(f"{current_time} -   条件2: 当日14:55价格低于5日均线 = {condition2} (当前价格={current_price:.2f}, 5日均线={ma5:.2f})")
+            print(f"{current_time} -   条件3: 当日14:55成交额<前60日成交额中位数 = {condition3} (当日成交额={current_amount:.0f}, 前60日成交额中位数={amount_median:.0f})")
+            
+            if condition1 and condition2 and condition3:
                 # 计算买入股数：向上取整至100股整数倍
                 buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
                 if buy_amount < 100:
@@ -258,155 +233,128 @@ def handle_data(context, data):
     
     # 止损条件检查
     if position and position.amount > 0:
-        # 条件1：第1次买入后，前5天中有至少3天收盘价低于60日均线且5日均线呈下降趋势，立即清仓
-        if stock_info['buy_count'] == 1:
-            close_below_ma60_count = 0
-            for i in range(max(0, len(hist)-5), len(hist)):
-                close = hist['close'][i]
-                if close < ma60:
-                    close_below_ma60_count += 1
-            
-            ma5_down_count = 0
-            if len(ma5_list) >= 2:
-                for i in range(max(0, len(ma5_list)-5), len(ma5_list)-1):
-                    if ma5_list[i+1] < ma5_list[i]:
-                        ma5_down_count += 1
-            
-            if close_below_ma60_count >= 3 and ma5_down_count >= 3:
-                print(f"{current_time} - 止损条件1触发：第1次买入后，前5天中有至少3天收盘价低于60日均线且5日均线呈下降趋势")
-                # 清仓
-                sell_amount = position.amount
-                try:
-                    print(f"{current_time} - 执行清仓: {security}, 数量: {sell_amount}")
-                    order(security, -sell_amount)
-                    
-                    # 使用当前价格和卖出数量
-                    execution_price = current_price
-                    filled_amount = sell_amount
-                    
-                    # 计算实际卖出所得（扣除佣金和印花税）
-                    sell_value = filled_amount * execution_price
-                    sell_commission = calculate_commission(sell_value)
-                    stamp_tax = calculate_stamp_tax(sell_value, security)
-                    actual_sell_income = sell_value - sell_commission - stamp_tax
-                    
-                    # 计算盈亏
-                    profit_loss = actual_sell_income - stock_info['total_cost']
-                    profit_loss_ratio = (profit_loss / stock_info['total_cost']) * 100 if stock_info['total_cost'] > 0 else 0
-                    
-                    # 更新累计落袋盈亏
-                    g.realized_pnl += profit_loss
-                    
-                    print(f"{current_time} - 清仓成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - 清仓盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
-                    
-                    # 重置相关变量
-                    stock_info['total_cost'] = 0
-                    stock_info['avg_cost'] = 0
-                    stock_info['last_buy_price'] = None
-                    stock_info['buy_count'] = 0
-                except Exception as e:
-                    print(f"{current_time} - 清仓失败: {e}")
+        # 止损条件：前5天中有至少3天满足收盘价/60日均线<0.98
+        close_below_ma60_count = 0
+        for i in range(max(0, len(hist)-5), len(hist)):
+            close = hist['close'][i]
+            if close / ma60 < g.ma60_ratio_stop:
+                close_below_ma60_count += 1
         
-        # 条件2：第2次买入后，盈利小于0.5%，立即清仓
-        elif stock_info['buy_count'] == 2:
-            total_value = position.amount * current_price
-            profit_loss = total_value - stock_info['total_cost']
-            profit_loss_ratio = (profit_loss / stock_info['total_cost']) * 100 if stock_info['total_cost'] > 0 else 0
-            
-            if profit_loss_ratio < g.profit_threshold * 100:
-                print(f"{current_time} - 止损条件2触发：第2次买入后，盈利小于{int(g.profit_threshold*100)}%")
-                # 清仓
-                sell_amount = position.amount
-                try:
-                    print(f"{current_time} - 执行清仓: {security}, 数量: {sell_amount}")
-                    order(security, -sell_amount)
-                    
-                    # 使用当前价格和卖出数量
-                    execution_price = current_price
-                    filled_amount = sell_amount
-                    
-                    # 计算实际卖出所得（扣除佣金和印花税）
-                    sell_value = filled_amount * execution_price
-                    sell_commission = calculate_commission(sell_value)
-                    stamp_tax = calculate_stamp_tax(sell_value, security)
-                    actual_sell_income = sell_value - sell_commission - stamp_tax
-                    
-                    # 计算盈亏
-                    profit_loss = actual_sell_income - stock_info['total_cost']
-                    profit_loss_ratio = (profit_loss / stock_info['total_cost']) * 100 if stock_info['total_cost'] > 0 else 0
-                    
-                    # 更新累计落袋盈亏
-                    g.realized_pnl += profit_loss
-                    
-                    print(f"{current_time} - 清仓成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - 清仓盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
-                    
-                    # 重置相关变量
-                    stock_info['total_cost'] = 0
-                    stock_info['avg_cost'] = 0
-                    stock_info['last_buy_price'] = None
-                    stock_info['buy_count'] = 0
-                except Exception as e:
-                    print(f"{current_time} - 清仓失败: {e}")
+        if close_below_ma60_count >= 3:
+            print(f"{current_time} - 止损条件触发：前5天中有至少3天满足收盘价/60日均线<{g.ma60_ratio_stop}")
+            # 清仓
+            sell_amount = position.amount
+            try:
+                print(f"{current_time} - 执行清仓: {security}, 数量: {sell_amount}")
+                order(security, -sell_amount)
+                
+                # 使用当前价格和卖出数量
+                execution_price = current_price
+                filled_amount = sell_amount
+                
+                # 计算实际卖出所得（扣除佣金和印花税）
+                sell_value = filled_amount * execution_price
+                sell_commission = calculate_commission(sell_value)
+                stamp_tax = calculate_stamp_tax(sell_value, security)
+                actual_sell_income = sell_value - sell_commission - stamp_tax
+                
+                # 计算盈亏
+                profit_loss = actual_sell_income - stock_info['total_cost']
+                profit_loss_ratio = (profit_loss / stock_info['total_cost']) * 100 if stock_info['total_cost'] > 0 else 0
+                
+                # 更新累计落袋盈亏
+                g.realized_pnl += profit_loss
+                
+                print(f"{current_time} - 清仓成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
+                print(f"{current_time} - 清仓盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
+                
+                # 重置相关变量
+                stock_info['total_cost'] = 0
+                stock_info['avg_cost'] = 0
+                stock_info['last_buy_price'] = None
+                stock_info['buy_count'] = 0
+            except Exception as e:
+                print(f"{current_time} - 清仓失败: {e}")
     
     # 止盈条件检查：14:55检查
     if current_time.hour == 14 and current_time.minute == 55 and position and position.amount > 0 and not stock_info['sell_check_today']:
-        # 条件1：前5天中有至少3天满足收盘价/60日均线>1.2
-        condition_sell_count = 0
-        for i in range(max(0, len(hist)-5), len(hist)):
-            close = hist['close'][i]
-            if close / ma60 > g.ma60_ratio_sell:
-                condition_sell_count += 1
+        # 计算当日成交额
+        current_amount = current_price * stock_info['daily_volume']
         
-        if condition_sell_count >= 3:
-            print(f"{current_time} - 止盈条件1触发：前5天中有至少3天满足收盘价/60日均线>{g.ma60_ratio_sell}")
-            # 计算卖出股数：按10000元计算
-            sell_amount = (int(g.sell_value / current_price) + 99) // 100 * 100
+        # 止盈条件1：当日14:55收盘价/60日均线>1.2且成交额>前60日成交额中位数，卖出10,000元
+        if current_price / ma60 > g.ma60_ratio_sell1 and current_amount > amount_median:
+            sell_value = 10000
+            print(f"{current_time} - 止盈条件1触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell1}且成交额>前60日成交额中位数")
+            # 计算卖出股数
+            sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
             if sell_amount < 100:
                 sell_amount = 100
             # 确保不超过持仓量
             sell_amount = min(sell_amount, position.amount)
-            
-            if sell_amount > 0:
-                try:
-                    print(f"{current_time} - 执行卖出: {security}, 数量: {sell_amount}")
-                    order(security, -sell_amount)
-                    
-                    # 使用当前价格和卖出数量
-                    execution_price = current_price
-                    filled_amount = sell_amount
-                    
-                    # 计算实际卖出所得（扣除佣金和印花税）
-                    sell_value = filled_amount * execution_price
-                    sell_commission = calculate_commission(sell_value)
-                    stamp_tax = calculate_stamp_tax(sell_value, security)
-                    actual_sell_income = sell_value - sell_commission - stamp_tax
-                    
-                    # 计算卖出部分的成本
-                    sell_cost = stock_info['avg_cost'] * filled_amount
-                    # 计算盈亏
-                    profit_loss = actual_sell_income - sell_cost
-                    profit_loss_ratio = (profit_loss / sell_cost) * 100 if sell_cost > 0 else 0
-                    
-                    # 更新累计成本和平均成本
-                    stock_info['total_cost'] -= sell_cost
-                    new_position_amount = position.amount - filled_amount
-                    if new_position_amount > 0:
-                        stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
-                    else:
-                        stock_info['total_cost'] = 0
-                        stock_info['avg_cost'] = 0
-                        stock_info['buy_count'] = 0
-                    
-                    # 更新累计落袋盈亏
-                    g.realized_pnl += profit_loss
-                    
-                    print(f"{current_time} - 卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - 卖出盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
-                    print(f"{current_time} - 剩余持仓量: {new_position_amount}, 剩余成本: {stock_info['total_cost']:.2f}, 剩余平均成本: {stock_info['avg_cost']:.2f}")
-                except Exception as e:
-                    print(f"{current_time} - 卖出失败: {e}")
+        
+        # 止盈条件2：当日14:55收盘价/60日均线>1.1且成交额>前60日成交额中位数，卖出7500元
+        elif current_price / ma60 > g.ma60_ratio_sell2 and current_amount > amount_median:
+            sell_value = 7500
+            print(f"{current_time} - 止盈条件2触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell2}且成交额>前60日成交额中位数")
+            # 计算卖出股数
+            sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
+            if sell_amount < 100:
+                sell_amount = 100
+            # 确保不超过持仓量
+            sell_amount = min(sell_amount, position.amount)
+        
+        # 止盈条件3：当日14:55收盘价/60日均线>1.05且成交额>前60日成交额中位数，卖出5000元
+        elif current_price / ma60 > g.ma60_ratio_sell3 and current_amount > amount_median:
+            sell_value = 5000
+            print(f"{current_time} - 止盈条件3触发：当日14:55收盘价/60日均线>{g.ma60_ratio_sell3}且成交额>前60日成交额中位数")
+            # 计算卖出股数
+            sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
+            if sell_amount < 100:
+                sell_amount = 100
+            # 确保不超过持仓量
+            sell_amount = min(sell_amount, position.amount)
+        else:
+            sell_amount = 0
+        
+        if sell_amount > 0:
+            try:
+                print(f"{current_time} - 执行卖出: {security}, 数量: {sell_amount}")
+                order(security, -sell_amount)
+                
+                # 使用当前价格和卖出数量
+                execution_price = current_price
+                filled_amount = sell_amount
+                
+                # 计算实际卖出所得（扣除佣金和印花税）
+                sell_value_actual = filled_amount * execution_price
+                sell_commission = calculate_commission(sell_value_actual)
+                stamp_tax = calculate_stamp_tax(sell_value_actual, security)
+                actual_sell_income = sell_value_actual - sell_commission - stamp_tax
+                
+                # 计算卖出部分的成本
+                sell_cost = stock_info['avg_cost'] * filled_amount
+                # 计算盈亏
+                profit_loss = actual_sell_income - sell_cost
+                profit_loss_ratio = (profit_loss / sell_cost) * 100 if sell_cost > 0 else 0
+                
+                # 更新累计成本和平均成本
+                stock_info['total_cost'] -= sell_cost
+                new_position_amount = position.amount - filled_amount
+                if new_position_amount > 0:
+                    stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
+                else:
+                    stock_info['total_cost'] = 0
+                    stock_info['avg_cost'] = 0
+                    stock_info['buy_count'] = 0
+                
+                # 更新累计落袋盈亏
+                g.realized_pnl += profit_loss
+                
+                print(f"{current_time} - 卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value_actual:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
+                print(f"{current_time} - 卖出盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
+                print(f"{current_time} - 剩余持仓量: {new_position_amount}, 剩余成本: {stock_info['total_cost']:.2f}, 剩余平均成本: {stock_info['avg_cost']:.2f}")
+            except Exception as e:
+                print(f"{current_time} - 卖出失败: {e}")
         
         # 标记当日已检查卖出条件
         stock_info['sell_check_today'] = True
