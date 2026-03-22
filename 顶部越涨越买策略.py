@@ -116,12 +116,12 @@ def handle_data(context, data):
         print(f"{current_time} - 获取成交量失败: {e}")
         return
     
-    # 获取历史数据
+    # 获取历史数据（用于计算均线）
     try:
         end_date = current_date.strftime('%Y%m%d')
         # 增加数据获取的时间范围
         start_date = (current_date - datetime.timedelta(days=120)).strftime('%Y%m%d')
-        hist = get_price(security, start_date=start_date, end_date=end_date, frequency='1d', fields=['close', 'open', 'volume'], fq='pre')
+        hist = get_price(security, start_date=start_date, end_date=end_date, frequency='1d', fields=['close', 'open'], fq='pre')
         if hist is None:
             print(f"{current_time} - 无法获取历史数据")
             return
@@ -130,6 +130,16 @@ def handle_data(context, data):
             return
     except Exception as e:
         print(f"{current_time} - 获取历史数据失败: {e}")
+        return
+    
+    # 获取历史数据（用于计算成交量，参考做T策略）
+    try:
+        hist_volume = get_price(security, start_date=start_date, end_date=end_date, frequency='1d', fields=['close', 'volume'], fq='pre')
+        if hist_volume is None or len(hist_volume) < 10:
+            print(f"{current_time} - 无法获取成交量数据")
+            return
+    except Exception as e:
+        print(f"{current_time} - 获取成交量数据失败: {e}")
         return
     
     # 计算60日均线（使用可用数据）
@@ -147,11 +157,11 @@ def handle_data(context, data):
             ma5_list.append(ma5)
     
     # 计算前60日成交量中位数（使用可用数据）
-    if len(hist) >= 60:
-        amount_60d = (hist['close'] * hist['volume'])[-60:]
+    if len(hist_volume) >= 60:
+        amount_60d = (hist_volume['close'] * hist_volume['volume'])[-60:]
     else:
-        amount_60d = (hist['close'] * hist['volume'])
-        print(f"{current_time} - 数据不足60天，使用{len(hist)}天数据计算成交量中位数")
+        amount_60d = (hist_volume['close'] * hist_volume['volume'])
+        print(f"{current_time} - 数据不足60天，使用{len(hist_volume)}天数据计算成交量中位数")
     amount_median = amount_60d.median()
     
     # 买入逻辑（14:55检查）
