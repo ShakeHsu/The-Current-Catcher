@@ -47,18 +47,22 @@ def initialize(context):
         }
     }
     
-    # 网格交易参数
+    # 非对称网格交易参数
     g.grid_base_price = 1.5  # 网格基准价格
     g.grid_interval = 0.05  # 网格间隔（元）
-    g.grid_levels = 10  # 网格层数
-    g.buy_value = 10000  # 每次买入目标金额（元）
+    g.grid_levels_down = 15  # 向下网格层数
+    g.grid_levels_up = 10  # 向上网格层数
+    g.buy_value = 12000  # 每次买入目标金额（元）
+    g.sell_value = 8000  # 每次卖出目标金额（元）
     g.max_cost = 200000  # 单只股票持仓成本上限（元）
-    g.min_price = g.grid_base_price - g.grid_interval * g.grid_levels  # 最低价格
-    g.max_price = g.grid_base_price + g.grid_interval * g.grid_levels  # 最高价格
+    g.min_price = g.grid_base_price - g.grid_interval * g.grid_levels_down  # 最低价格
+    g.max_price = g.grid_base_price + g.grid_interval * g.grid_levels_up  # 最高价格
     
     # 打印初始化信息
-    print(f"[{datetime.datetime.now()}] 网格交易策略初始化完成，股票: {g.security}")
-    print(f"[{datetime.datetime.now()}] 网格参数：基准价格={g.grid_base_price:.2f}, 间隔={g.grid_interval:.2f}, 层数={g.grid_levels}")
+    print(f"[{datetime.datetime.now()}] 非对称网格交易策略初始化完成，股票: {g.security}")
+    print(f"[{datetime.datetime.now()}] 网格参数：基准价格={g.grid_base_price:.2f}, 间隔={g.grid_interval:.2f}")
+    print(f"[{datetime.datetime.now()}] 网格层数：向下={g.grid_levels_down}层, 向上={g.grid_levels_up}层")
+    print(f"[{datetime.datetime.now()}] 交易金额：买入={g.buy_value}元, 卖出={g.sell_value}元")
     print(f"[{datetime.datetime.now()}] 价格范围：{g.min_price:.2f} - {g.max_price:.2f}")
 
 def handle_data(context, data):
@@ -165,7 +169,7 @@ def handle_data(context, data):
         # 卖出条件：价格上涨到网格上限
         if current_price < g.max_price and current_grid > avg_cost_grid + 1:
             # 卖出部分仓位
-            sell_value = g.buy_value
+            sell_value = g.sell_value
             sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
             if sell_amount < 100:
                 sell_amount = 100
