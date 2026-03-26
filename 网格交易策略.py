@@ -50,7 +50,7 @@ def initialize(context):
     
     # 网格交易参数（参考雪球网格交易算法）
     g.grid_base_price = 303  # 网格基准价格（中枢）
-    g.grid_interval_pct = 0.03  # 网格间距（3%）
+    g.grid_interval = 5  # 网格间距（绝对值，元）
     g.grid_levels_down = 10  # 向下网格层数
     g.grid_levels_up = 10  # 向上网格层数
     g.buy_value = 100000  # 每次买入目标金额（元）
@@ -60,7 +60,7 @@ def initialize(context):
     # 计算网格上下限和各层价格
     g.grid_prices = []
     for i in range(-g.grid_levels_down, g.grid_levels_up + 1):
-        price = g.grid_base_price * (1 + g.grid_interval_pct) ** i
+        price = g.grid_base_price + i * g.grid_interval
         g.grid_prices.append(price)
     
     g.min_price = g.grid_prices[0]  # 最低价格
@@ -68,18 +68,17 @@ def initialize(context):
     
     # 打印初始化信息
     print(f"[{datetime.datetime.now()}] 网格交易策略初始化完成，股票: {g.security}")
-    print(f"[{datetime.datetime.now()}] 网格参数：基准价格={g.grid_base_price:.2f}, 间距={g.grid_interval_pct*100:.1f}%")
+    print(f"[{datetime.datetime.now()}] 网格参数：基准价格={g.grid_base_price:.2f}, 间距={g.grid_interval:.2f}元")
     print(f"[{datetime.datetime.now()}] 网格层数：向下={g.grid_levels_down}层, 向上={g.grid_levels_up}层")
     print(f"[{datetime.datetime.now()}] 交易金额：买入={g.buy_value}元, 卖出={g.sell_value}元")
     print(f"[{datetime.datetime.now()}] 价格范围：{g.min_price:.2f} - {g.max_price:.2f}")
     print(f"[{datetime.datetime.now()}] 网格价格：{[round(p, 2) for p in g.grid_prices]}")
 
-def get_grid_level(price, base_price, interval_pct):
+def get_grid_level(price, base_price, interval):
     """根据价格计算当前网格级别"""
-    if price <= 0 or base_price <= 0:
+    if interval <= 0:
         return 0
-    import math
-    level = math.log(price / base_price) / math.log(1 + interval_pct)
+    level = (price - base_price) / interval
     return round(level)
 
 def handle_data(context, data):
@@ -139,7 +138,7 @@ def handle_data(context, data):
     position_amount = position.amount if position else 0
     
     # 计算当前网格级别
-    current_grid_level = get_grid_level(current_price, g.grid_base_price, g.grid_interval_pct)
+    current_grid_level = get_grid_level(current_price, g.grid_base_price, g.grid_interval)
     
     # 打印调试信息
     print(f"{current_time} - 调试信息: 当前价格={current_price:.2f}, 当前网格级别={current_grid_level}, 持仓量={position_amount}")
