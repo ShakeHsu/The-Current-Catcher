@@ -21,7 +21,7 @@ def calculate_stamp_tax(amount, security):
 def initialize(context):
     """初始化策略"""
     # 策略参数
-    g.security = "688111.SH"  # 金山办公
+    g.security = "688111.SS"  # 金山办公
     g.realized_pnl = 0  # 累计落袋盈亏（全局变量）
     g.pending_orders = {}  # 待处理的订单
     
@@ -49,7 +49,7 @@ def initialize(context):
     }
     
     # 网格交易参数（参考雪球网格交易算法）
-    g.grid_base_price = 303  # 网格基准价格（中枢）
+    g.grid_base_price = 350  # 网格基准价格（中枢）
     g.grid_interval = 5  # 网格间距（绝对值，元）
     g.grid_levels_down = 10  # 向下网格层数
     g.grid_levels_up = 10  # 向上网格层数
@@ -80,6 +80,13 @@ def get_grid_level(price, base_price, interval):
         return 0
     level = (price - base_price) / interval
     return round(level)
+
+def is_at_grid_price(price, grid_prices, tolerance=0.01):
+    """检查价格是否正好在网格价格上（允许小误差）"""
+    for grid_price in grid_prices:
+        if abs(price - grid_price) < tolerance:
+            return True, grid_price
+    return False, None
 
 def handle_data(context, data):
     """核心交易逻辑"""
@@ -140,13 +147,16 @@ def handle_data(context, data):
     # 计算当前网格级别
     current_grid_level = get_grid_level(current_price, g.grid_base_price, g.grid_interval)
     
+    # 检查价格是否正好在网格价格上（允许小误差）
+    is_at_grid, grid_price = is_at_grid_price(current_price, g.grid_prices, tolerance=0.01)
+    
     # 打印调试信息
-    print(f"{current_time} - 调试信息: 当前价格={current_price:.2f}, 当前网格级别={current_grid_level}, 持仓量={position_amount}")
+    print(f"{current_time} - 调试信息: 当前价格={current_price:.2f}, 当前网格级别={current_grid_level}, 是否在网格价格上={is_at_grid}, 对应网格价格={grid_price:.2f if grid_price else None}, 持仓量={position_amount}")
     if position_amount > 0:
         print(f"{current_time} - 调试信息: 平均成本={stock_info['avg_cost']:.2f}, 当前网格级别={current_grid_level}, 上次网格级别={stock_info['grid_level']}")
     
-    # 首次建仓逻辑：价格低于基准价格且无持仓
-    if position_amount == 0 and current_price < g.grid_base_price:
+    # 首次建仓逻辑：价格正好在网格价格上且低于基准价格且无持仓
+    if position_amount == 0 and current_price < g.grid_base_price and is_at_grid:
         # 首次建仓
         buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
         if buy_amount < 100:
@@ -183,8 +193,8 @@ def handle_data(context, data):
             print(f"{current_time} - 建仓成功，成交价格={execution_price:.2f}, 成交股数={filled_amount}, 买入金额={buy_value:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}, 总买入次数: {stock_info['buy_count']}")
         except Exception as e:
             print(f"{current_time} - 建仓失败: {e}")
-    elif position_amount > 0:
-        # 网格交易逻辑
+    elif position_amount > 0 and is_at_grid:
+        # 网格交易逻辑：只有在价格正好在网格价格上时才交易
         # 计算网格级别变化
         grid_level_change = current_grid_level - stock_info['grid_level']
         
