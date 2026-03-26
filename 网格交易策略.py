@@ -21,7 +21,7 @@ def calculate_stamp_tax(amount, security):
 def initialize(context):
     """初始化策略"""
     # 策略参数
-    g.security = "159825.SZ"  # 农业ETF
+    g.security = "688111.SH"  # 金山办公
     g.realized_pnl = 0  # 累计落袋盈亏（全局变量）
     g.pending_orders = {}  # 待处理的订单
     
@@ -48,13 +48,13 @@ def initialize(context):
     }
     
     # 非对称网格交易参数
-    g.grid_base_price = 1.5  # 网格基准价格
-    g.grid_interval = 0.05  # 网格间隔（元）
-    g.grid_levels_down = 15  # 向下网格层数
-    g.grid_levels_up = 10  # 向上网格层数
-    g.buy_value = 12000  # 每次买入目标金额（元）
-    g.sell_value = 8000  # 每次卖出目标金额（元）
-    g.max_cost = 200000  # 单只股票持仓成本上限（元）
+    g.grid_base_price = 303  # 网格基准价格
+    g.grid_interval = 1  # 网格间隔（元）
+    g.grid_levels_down = 17  # 向下网格层数
+    g.grid_levels_up = 13  # 向上网格层数
+    g.buy_value = 100000  # 每次买入目标金额（元）
+    g.sell_value = 100000  # 每次卖出目标金额（元）
+    g.max_cost = 1000000  # 单只股票持仓成本上限（元）
     g.min_price = g.grid_base_price - g.grid_interval * g.grid_levels_down  # 最低价格
     g.max_price = g.grid_base_price + g.grid_interval * g.grid_levels_up  # 最高价格
     
@@ -124,6 +124,11 @@ def handle_data(context, data):
     # 计算当前网格位置
     current_grid = round((current_price - g.grid_base_price) / g.grid_interval)
     
+    # 打印调试信息
+    print(f"{current_time} - 调试信息: 当前价格={current_price:.2f}, 当前网格={current_grid}, 持仓量={position_amount}")
+    if position_amount > 0:
+        print(f"{current_time} - 调试信息: 平均成本={stock_info['avg_cost']:.2f}, 平均成本网格={round((stock_info['avg_cost'] - g.grid_base_price) / g.grid_interval)}")
+    
     # 买入逻辑：价格下跌到网格下限
     if current_price > g.min_price and position_amount == 0:
         # 首次建仓
@@ -166,8 +171,14 @@ def handle_data(context, data):
         # 计算当前持仓的网格位置
         avg_cost_grid = round((stock_info['avg_cost'] - g.grid_base_price) / g.grid_interval)
         
-        # 卖出条件：价格上涨到网格上限
-        if current_price < g.max_price and current_grid > avg_cost_grid + 1:
+        # 卖出条件：价格上涨超过平均成本一个网格间隔以上
+        price_above_avg = current_price - stock_info['avg_cost']
+        grid_diff = current_grid - avg_cost_grid
+        
+        print(f"{current_time} - 卖出检查: 价格高于平均成本={price_above_avg:.2f}, 网格差={grid_diff}")
+        
+        if current_price < g.max_price and price_above_avg >= g.grid_interval:
+            print(f"{current_time} - 卖出条件满足: 价格高于平均成本{price_above_avg:.2f} >= 网格间隔{g.grid_interval}")
             # 卖出部分仓位
             sell_value = g.sell_value
             sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
@@ -221,6 +232,8 @@ def handle_data(context, data):
                     print(f"{current_time} - 剩余持仓量: {new_position_amount}, 剩余成本: {stock_info['total_cost']:.2f}, 剩余平均成本: {stock_info['avg_cost']:.2f}")
                 except Exception as e:
                     print(f"{current_time} - 卖出失败: {e}")
+        else:
+            print(f"{current_time} - 卖出条件不满足: 价格高于平均成本{price_above_avg:.2f} < 网格间隔{g.grid_interval}")
         
         # 买入条件：价格下跌到网格下限
         if current_price > g.min_price and current_grid < avg_cost_grid - 1:
