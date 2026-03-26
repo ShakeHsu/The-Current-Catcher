@@ -44,26 +44,43 @@ def initialize(context):
             'daily_volume': 0,  # 当日累计成交量
             'buy_count': 0,  # 总买入次数
             'sell_count': 0,  # 总卖出次数
+            'grid_level': 0,  # 当前网格级别（0为基准）
         }
     }
     
-    # 非对称网格交易参数
-    g.grid_base_price = 303  # 网格基准价格
-    g.grid_interval = 1  # 网格间隔（元）
-    g.grid_levels_down = 17  # 向下网格层数
-    g.grid_levels_up = 13  # 向上网格层数
+    # 网格交易参数（参考雪球网格交易算法）
+    g.grid_base_price = 303  # 网格基准价格（中枢）
+    g.grid_interval_pct = 0.03  # 网格间距（3%）
+    g.grid_levels_down = 10  # 向下网格层数
+    g.grid_levels_up = 10  # 向上网格层数
     g.buy_value = 100000  # 每次买入目标金额（元）
     g.sell_value = 100000  # 每次卖出目标金额（元）
     g.max_cost = 1000000  # 单只股票持仓成本上限（元）
-    g.min_price = g.grid_base_price - g.grid_interval * g.grid_levels_down  # 最低价格
-    g.max_price = g.grid_base_price + g.grid_interval * g.grid_levels_up  # 最高价格
+    
+    # 计算网格上下限和各层价格
+    g.grid_prices = []
+    for i in range(-g.grid_levels_down, g.grid_levels_up + 1):
+        price = g.grid_base_price * (1 + g.grid_interval_pct) ** i
+        g.grid_prices.append(price)
+    
+    g.min_price = g.grid_prices[0]  # 最低价格
+    g.max_price = g.grid_prices[-1]  # 最高价格
     
     # 打印初始化信息
-    print(f"[{datetime.datetime.now()}] 非对称网格交易策略初始化完成，股票: {g.security}")
-    print(f"[{datetime.datetime.now()}] 网格参数：基准价格={g.grid_base_price:.2f}, 间隔={g.grid_interval:.2f}")
+    print(f"[{datetime.datetime.now()}] 网格交易策略初始化完成，股票: {g.security}")
+    print(f"[{datetime.datetime.now()}] 网格参数：基准价格={g.grid_base_price:.2f}, 间距={g.grid_interval_pct*100:.1f}%")
     print(f"[{datetime.datetime.now()}] 网格层数：向下={g.grid_levels_down}层, 向上={g.grid_levels_up}层")
     print(f"[{datetime.datetime.now()}] 交易金额：买入={g.buy_value}元, 卖出={g.sell_value}元")
     print(f"[{datetime.datetime.now()}] 价格范围：{g.min_price:.2f} - {g.max_price:.2f}")
+    print(f"[{datetime.datetime.now()}] 网格价格：{[round(p, 2) for p in g.grid_prices]}")
+
+def get_grid_level(price, base_price, interval_pct):
+    """根据价格计算当前网格级别"""
+    if price <= 0 or base_price <= 0:
+        return 0
+    import math
+    level = math.log(price / base_price) / math.log(1 + interval_pct)
+    return round(level)
 
 def handle_data(context, data):
     """核心交易逻辑"""
@@ -121,16 +138,16 @@ def handle_data(context, data):
     position = context.portfolio.positions.get(security, None)
     position_amount = position.amount if position else 0
     
-    # 计算当前网格位置
-    current_grid = round((current_price - g.grid_base_price) / g.grid_interval)
+    # 计算当前网格级别
+    current_grid_level = get_grid_level(current_price, g.grid_base_price, g.grid_interval_pct)
     
     # 打印调试信息
-    print(f"{current_time} - 调试信息: 当前价格={current_price:.2f}, 当前网格={current_grid}, 持仓量={position_amount}")
+    print(f"{current_time} - 调试信息: 当前价格={current_price:.2f}, 当前网格级别={current_grid_level}, 持仓量={position_amount}")
     if position_amount > 0:
-        print(f"{current_time} - 调试信息: 平均成本={stock_info['avg_cost']:.2f}, 平均成本网格={round((stock_info['avg_cost'] - g.grid_base_price) / g.grid_interval)}")
+        print(f"{current_time} - 调试信息: 平均成本={stock_info['avg_cost']:.2f}, 当前网格级别={current_grid_level}, 上次网格级别={stock_info['grid_level']}")
     
-    # 买入逻辑：价格下跌到网格下限
-    if current_price > g.min_price and position_amount == 0:
+    # 首次建仓逻辑：价格低于基准价格且无持仓
+    if position_amount == 0 and current_price < g.grid_base_price:
         # 首次建仓
         buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
         if buy_amount < 100:
@@ -138,7 +155,7 @@ def handle_data(context, data):
         
         # 执行买入
         try:
-            print(f"{current_time} - 执行建仓: {security}, 数量: {buy_amount}")
+            print(f"{current_time} - 执行首次建仓: {security}, 数量: {buy_amount}")
             order(security, buy_amount)
             
             # 使用当前价格和买入数量
@@ -163,120 +180,134 @@ def handle_data(context, data):
             stock_info['last_buy_price'] = execution_price
             stock_info['today_buy_amount'] += filled_amount
             stock_info['buy_count'] += 1
+            stock_info['grid_level'] = current_grid_level  # 更新网格级别
             print(f"{current_time} - 建仓成功，成交价格={execution_price:.2f}, 成交股数={filled_amount}, 买入金额={buy_value:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}, 总买入次数: {stock_info['buy_count']}")
         except Exception as e:
             print(f"{current_time} - 建仓失败: {e}")
     elif position_amount > 0:
         # 网格交易逻辑
-        # 计算当前持仓的网格位置
-        avg_cost_grid = round((stock_info['avg_cost'] - g.grid_base_price) / g.grid_interval)
+        # 计算网格级别变化
+        grid_level_change = current_grid_level - stock_info['grid_level']
         
-        # 卖出条件：价格上涨超过平均成本一个网格间隔以上
-        price_above_avg = current_price - stock_info['avg_cost']
-        grid_diff = current_grid - avg_cost_grid
-        
-        print(f"{current_time} - 卖出检查: 价格高于平均成本={price_above_avg:.2f}, 网格差={grid_diff}")
-        
-        if current_price < g.max_price and price_above_avg >= g.grid_interval:
-            print(f"{current_time} - 卖出条件满足: 价格高于平均成本{price_above_avg:.2f} >= 网格间隔{g.grid_interval}")
-            # 卖出部分仓位
-            sell_value = g.sell_value
-            sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
-            if sell_amount < 100:
-                sell_amount = 100
-            # 确保不超过持仓量
-            sell_amount = min(sell_amount, position_amount)
+        # 卖出逻辑：价格上涨，网格级别上升
+        if grid_level_change > 0:
+            print(f"{current_time} - 网格级别上升: 从{stock_info['grid_level']}到{current_grid_level}")
+            # 计算需要卖出的次数（网格级别变化数）
+            sell_times = grid_level_change
             
-            if sell_amount > 0:
+            for i in range(sell_times):
+                # 卖出部分仓位
+                sell_value = g.sell_value
+                sell_amount = (int(sell_value / current_price) + 99) // 100 * 100
+                if sell_amount < 100:
+                    sell_amount = 100
+                # 确保不超过持仓量
+                sell_amount = min(sell_amount, position_amount)
+                
+                if sell_amount > 0:
+                    try:
+                        print(f"{current_time} - 执行卖出: {security}, 数量: {sell_amount}")
+                        order(security, -sell_amount)
+                        
+                        # 使用当前价格和卖出数量
+                        execution_price = current_price
+                        filled_amount = sell_amount
+                        
+                        # 计算实际卖出所得（扣除佣金和印花税）
+                        sell_value_actual = filled_amount * execution_price
+                        sell_commission = calculate_commission(sell_value_actual)
+                        stamp_tax = calculate_stamp_tax(sell_value_actual, security)
+                        actual_sell_income = sell_value_actual - sell_commission - stamp_tax
+                        
+                        # 计算卖出部分的成本
+                        sell_cost = stock_info['avg_cost'] * filled_amount
+                        # 计算盈亏
+                        profit_loss = actual_sell_income - sell_cost
+                        profit_loss_ratio = (profit_loss / sell_cost) * 100 if sell_cost > 0 else 0
+                        
+                        # 更新累计成本和平均成本
+                        stock_info['total_cost'] -= sell_cost
+                        new_position_amount = position_amount - filled_amount
+                        if new_position_amount > 0:
+                            stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
+                        else:
+                            stock_info['total_cost'] = 0
+                            stock_info['avg_cost'] = 0
+                        
+                        # 更新累计落袋盈亏
+                        g.realized_pnl += profit_loss
+                        
+                        # 更新卖出信息
+                        stock_info['last_sell_date'] = current_date
+                        stock_info['last_sell_price'] = execution_price
+                        stock_info['today_sell_amount'] += filled_amount
+                        stock_info['today_sell_income'] += actual_sell_income
+                        stock_info['sell_count'] += 1
+                        position_amount = new_position_amount  # 更新持仓量
+                        
+                        print(f"{current_time} - 卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value_actual:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
+                        print(f"{current_time} - 卖出盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
+                        print(f"{current_time} - 剩余持仓量: {new_position_amount}, 剩余成本: {stock_info['total_cost']:.2f}, 剩余平均成本: {stock_info['avg_cost']:.2f}")
+                    except Exception as e:
+                        print(f"{current_time} - 卖出失败: {e}")
+                else:
+                    break
+            
+            # 更新网格级别
+            stock_info['grid_level'] = current_grid_level
+        
+        # 买入逻辑：价格下跌，网格级别下降
+        elif grid_level_change < 0:
+            print(f"{current_time} - 网格级别下降: 从{stock_info['grid_level']}到{current_grid_level}")
+            # 计算需要买入的次数（网格级别变化数的绝对值）
+            buy_times = abs(grid_level_change)
+            
+            for i in range(buy_times):
+                # 买入部分仓位
+                buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
+                if buy_amount < 100:
+                    buy_amount = 100
+                
+                # 资金管理：总持仓成本不超过上限
+                estimated_cost = buy_amount * current_price + calculate_commission(buy_amount * current_price)
+                if stock_info['total_cost'] + estimated_cost > g.max_cost:
+                    print(f"{current_time} - 持仓成本已达上限，跳过买入")
+                    break
+                
                 try:
-                    print(f"{current_time} - 执行卖出: {security}, 数量: {sell_amount}")
-                    order(security, -sell_amount)
+                    print(f"{current_time} - 执行买入: {security}, 数量: {buy_amount}")
+                    order(security, buy_amount)
                     
-                    # 使用当前价格和卖出数量
+                    # 使用当前价格和买入数量
                     execution_price = current_price
-                    filled_amount = sell_amount
+                    filled_amount = buy_amount
                     
-                    # 计算实际卖出所得（扣除佣金和印花税）
-                    sell_value_actual = filled_amount * execution_price
-                    sell_commission = calculate_commission(sell_value_actual)
-                    stamp_tax = calculate_stamp_tax(sell_value_actual, security)
-                    actual_sell_income = sell_value_actual - sell_commission - stamp_tax
+                    # 计算实际买入成本（含佣金）
+                    buy_value = filled_amount * execution_price
+                    buy_commission = calculate_commission(buy_value)
+                    actual_buy_cost = buy_value + buy_commission
                     
-                    # 计算卖出部分的成本
-                    sell_cost = stock_info['avg_cost'] * filled_amount
-                    # 计算盈亏
-                    profit_loss = actual_sell_income - sell_cost
-                    profit_loss_ratio = (profit_loss / sell_cost) * 100 if sell_cost > 0 else 0
-                    
-                    # 更新累计成本和平均成本
-                    stock_info['total_cost'] -= sell_cost
-                    new_position_amount = position_amount - filled_amount
+                    # 更新累计成本
+                    stock_info['total_cost'] += actual_buy_cost
+                    # 更新当日买入成本
+                    stock_info['today_buy_cost'] += actual_buy_cost
+                    # 更新平均成本
+                    new_position_amount = position_amount + filled_amount
                     if new_position_amount > 0:
                         stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
-                    else:
-                        stock_info['total_cost'] = 0
-                        stock_info['avg_cost'] = 0
+                    # 更新买入信息
+                    stock_info['last_buy_date'] = current_date
+                    stock_info['last_buy_price'] = execution_price
+                    stock_info['today_buy_amount'] += filled_amount
+                    stock_info['buy_count'] += 1
+                    position_amount = new_position_amount  # 更新持仓量
                     
-                    # 更新累计落袋盈亏
-                    g.realized_pnl += profit_loss
-                    
-                    # 更新卖出信息
-                    stock_info['last_sell_date'] = current_date
-                    stock_info['last_sell_price'] = execution_price
-                    stock_info['today_sell_amount'] += filled_amount
-                    stock_info['today_sell_income'] += actual_sell_income
-                    stock_info['sell_count'] += 1
-                    
-                    print(f"{current_time} - 卖出成功：成交价格={execution_price:.2f}, 成交股数={filled_amount}, 卖出金额={sell_value_actual:.2f}, 佣金={sell_commission:.2f}, 印花税={stamp_tax:.2f}, 实际卖出所得={actual_sell_income:.2f}")
-                    print(f"{current_time} - 卖出盈亏={profit_loss:.2f}, 盈亏比例={profit_loss_ratio:.2f}%, 累计落袋盈亏={g.realized_pnl:.2f}")
-                    print(f"{current_time} - 剩余持仓量: {new_position_amount}, 剩余成本: {stock_info['total_cost']:.2f}, 剩余平均成本: {stock_info['avg_cost']:.2f}")
+                    print(f"{current_time} - 买入成功，成交价格={execution_price:.2f}, 成交股数={filled_amount}, 买入金额={buy_value:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}, 总买入次数: {stock_info['buy_count']}")
                 except Exception as e:
-                    print(f"{current_time} - 卖出失败: {e}")
-        else:
-            print(f"{current_time} - 卖出条件不满足: 价格高于平均成本{price_above_avg:.2f} < 网格间隔{g.grid_interval}")
-        
-        # 买入条件：价格下跌到网格下限
-        if current_price > g.min_price and current_grid < avg_cost_grid - 1:
-            # 买入部分仓位
-            buy_amount = (int(g.buy_value / current_price) + 99) // 100 * 100
-            if buy_amount < 100:
-                buy_amount = 100
+                    print(f"{current_time} - 买入失败: {e}")
             
-            # 资金管理：总持仓成本不超过上限
-            estimated_cost = buy_amount * current_price + calculate_commission(buy_amount * current_price)
-            if stock_info['total_cost'] + estimated_cost > g.max_cost:
-                print(f"{current_time} - 持仓成本已达上限，跳过买入")
-                return
-            
-            try:
-                print(f"{current_time} - 执行买入: {security}, 数量: {buy_amount}")
-                order(security, buy_amount)
-                
-                # 使用当前价格和买入数量
-                execution_price = current_price
-                filled_amount = buy_amount
-                
-                # 计算实际买入成本（含佣金）
-                buy_value = filled_amount * execution_price
-                buy_commission = calculate_commission(buy_value)
-                actual_buy_cost = buy_value + buy_commission
-                
-                # 更新累计成本
-                stock_info['total_cost'] += actual_buy_cost
-                # 更新当日买入成本
-                stock_info['today_buy_cost'] += actual_buy_cost
-                # 更新平均成本
-                new_position_amount = position_amount + filled_amount
-                if new_position_amount > 0:
-                    stock_info['avg_cost'] = stock_info['total_cost'] / new_position_amount
-                # 更新买入信息
-                stock_info['last_buy_date'] = current_date
-                stock_info['last_buy_price'] = execution_price
-                stock_info['today_buy_amount'] += filled_amount
-                stock_info['buy_count'] += 1
-                print(f"{current_time} - 买入成功，成交价格={execution_price:.2f}, 成交股数={filled_amount}, 买入金额={buy_value:.2f}, 佣金={buy_commission:.2f}, 实际买入成本={actual_buy_cost:.2f}, 累计成本: {stock_info['total_cost']:.2f}, 平均成本: {stock_info['avg_cost']:.2f}, 当日买入量: {stock_info['today_buy_amount']}, 总买入次数: {stock_info['buy_count']}")
-            except Exception as e:
-                print(f"{current_time} - 买入失败: {e}")
+            # 更新网格级别
+            stock_info['grid_level'] = current_grid_level
     
     # 收盘时计算并显示统计信息
     if current_time.hour == 15 and current_time.minute == 0:
@@ -300,6 +331,7 @@ def handle_data(context, data):
             print(f"{current_time} -   今日买入: {stock_info['today_buy_amount']}股, 成本: {stock_info['today_buy_cost']:.2f}")
             print(f"{current_time} -   今日卖出: {stock_info['today_sell_amount']}股, 收入: {stock_info['today_sell_income']:.2f}")
             print(f"{current_time} -   总买入次数: {stock_info['buy_count']}, 总卖出次数: {stock_info['sell_count']}")
+            print(f"{current_time} -   当前网格级别: {stock_info['grid_level']}")
         else:
             print(f"{current_time} - 收盘统计: 无持仓")
             print(f"{current_time} -   落袋盈亏: {g.realized_pnl:.2f}")
